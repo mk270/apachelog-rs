@@ -1,3 +1,5 @@
+#[allow(dead_code)]
+
 use std::fs;
 use std::fs::File;
 use std::path::PathBuf;
@@ -8,6 +10,8 @@ use std::str;
 use clap::{Arg, App};
 use std::io::Read;
 use flate2::read::GzDecoder;
+
+mod log_entry;
 
 // read the contents of the file in `filename` and zcat them to the
 // channel `tx`
@@ -56,7 +60,8 @@ fn process_dir(dir_name: String) -> std::io::Result<()> {
     });
 
     for line in rx3 {
-        println!("{}", line);
+        let le = log_entry::producer(&line);
+        println!("{:?}", le?.ip_address);
     }
 
     Ok(())
