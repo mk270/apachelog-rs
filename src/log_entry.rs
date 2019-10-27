@@ -3,21 +3,32 @@ use pom::parser::*;
 use chrono::NaiveDateTime;
 use std::io::{Error, ErrorKind};
 use std::str::FromStr;
+use std::fmt;
 
 pub struct ApacheLog {
-    pub ip_address: String,
-    identd: String,
-    username: String,
-    time: NaiveDateTime,
-    request: String,
+    source: String,
+    timestamp: NaiveDateTime,
+    method: String,
+    uri: String,
     status_code: i64,
-    size: Option<i64>,
+    content_length: Option<i64>,
     referrer: String,
     user_agent: String
 }
 
-pub fn producer(line: &str) -> Result<ApacheLog, Error> {
-    let parser =
+impl fmt::Display for ApacheLog {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}\n {}\n {} {}\n {}\n {}\n {}\n {}\n", 
+               self.timestamp,
+               self.source, self.method, self.uri,
+               self.status_code,
+               self.content_length.unwrap_or(0),
+               self.referrer, self.user_agent)
+    }
+}
+
+pub fn parse_string(s: &str) -> Result<ApacheLog, Error> {
+    let p =
         dotted_quad() +
         word() +
         word() +
@@ -27,36 +38,51 @@ pub fn producer(line: &str) -> Result<ApacheLog, Error> {
         word() +
         space() * quoted() +
         space() * quoted();
-    let mut input = DataInput::new(line.as_ref());
 
-    let output = parser.parse(&mut input);
+    let mut data = DataInput::new(s.as_ref());
+    let result = p.parse(&mut data);
 
-    if let Ok(((((((((ip_address, identd), username), time), request),
-                  status_code), raw_size), referrer), user_agent)) = output {
+    if let Ok(((((((((source,
+                      _identuser),
+                     _authuser),
+                    timestamp),
+                   request),
+                  status_code),
+                 raw_content_length),
+                referrer),
+               user_agent)) = result {
 
-        let size = match i64::from_str(&raw_size) {
+        let content_length = match i64::from_str(&raw_content_length) {
             Ok(parse_size) => Some(parse_size),
             _ => None
         };
 
+        let split = request.split(" ");
+        let words = split.collect::<Vec<&str>>();
+
+        let (method, uri, _http_version) = match words[..] {
+            [m, u, v] => { (m.to_uppercase(), u, Some(v)) }
+            [m, u]    => { (m.to_uppercase(), u, None)    }
+            _  => { return Err(Error::from(ErrorKind::InvalidData)) }
+        };
+
         return Ok(ApacheLog {
-            ip_address: ip_address,
-            identd: identd,
-            username: username,
-            time: NaiveDateTime::parse_from_str(
-                &time, "%d/%b/%Y:%H:%M:%S %z").unwrap(),
-            request: request,
+            source: source,
+            timestamp: NaiveDateTime::parse_from_str(
+                &timestamp, "%d/%b/%Y:%H:%M:%S %z").unwrap(),
+            method: method,
+            uri: uri.to_string(),
             status_code: i64::from_str(&status_code).unwrap(),
-            size: size,
+            content_length: content_length,
             referrer: referrer,
             user_agent: user_agent,
         });
+    } else {
+        Err(Error::from(ErrorKind::InvalidData))
     }
-
-    Err(Error::from(ErrorKind::InvalidData))
 }
 
-// doesn't handle 
+// doesn't handle leading zeros, values > 255, etc
 fn dotted_quad<'a>() -> Parser<'a, u8, String> {
     (one_of(b"0123456789").repeat(0..) + sym(b'.') +
      one_of(b"0123456789").repeat(0..) + sym(b'.') +

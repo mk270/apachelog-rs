@@ -60,8 +60,8 @@ fn process_dir(dir_name: String) -> std::io::Result<()> {
     });
 
     for line in rx3 {
-        let le = log_entry::producer(&line);
-        println!("{:?}", le?.ip_address);
+        let le = log_entry::parse_string(&line);
+        println!("{}", le?.to_string());
     }
 
     Ok(())
