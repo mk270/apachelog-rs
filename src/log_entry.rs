@@ -5,7 +5,7 @@ use std::io::{Error, ErrorKind};
 use std::str::FromStr;
 use std::fmt;
 
-pub struct ApacheLog {
+pub struct CommonLog {
     source: String,
     timestamp: NaiveDateTime,
     method: String,
@@ -16,7 +16,7 @@ pub struct ApacheLog {
     user_agent: String
 }
 
-impl fmt::Display for ApacheLog {
+impl fmt::Display for CommonLog {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}\n {}\n {} {}\n {}\n {}\n {}\n {}\n", 
                self.timestamp,
@@ -27,7 +27,7 @@ impl fmt::Display for ApacheLog {
     }
 }
 
-pub fn parse_string(s: &str) -> Result<ApacheLog, Error> {
+pub fn parse_string(s: &str) -> Result<CommonLog, Error> {
     let p =
         dotted_quad() +
         word() +
@@ -66,13 +66,17 @@ pub fn parse_string(s: &str) -> Result<ApacheLog, Error> {
             _  => { return Err(Error::from(ErrorKind::InvalidData)) }
         };
 
-        return Ok(ApacheLog {
+        let date_fmt = "%d/%b/%Y:%H:%M:%S %z";
+        let ts = NaiveDateTime::parse_from_str(&timestamp, date_fmt).unwrap();
+
+        let sc = i64::from_str(&status_code).unwrap();
+
+        return Ok(CommonLog {
             source: source,
-            timestamp: NaiveDateTime::parse_from_str(
-                &timestamp, "%d/%b/%Y:%H:%M:%S %z").unwrap(),
+            timestamp: ts,
             method: method,
             uri: uri.to_string(),
-            status_code: i64::from_str(&status_code).unwrap(),
+            status_code: sc,
             content_length: content_length,
             referrer: referrer,
             user_agent: user_agent,
